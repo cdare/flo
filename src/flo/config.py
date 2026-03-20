@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     cheap_model: str = "gpt-4o-mini"
     premium_model: str = "gpt-4o"
 
+    # Memory
+    max_messages: int = 20
+
     @property
     def is_production(self) -> bool:
         return self.env == "production"
