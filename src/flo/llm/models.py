@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import Any
 
 
 class TaskType(StrEnum):
@@ -29,3 +30,4 @@ class LLMResponse:
     model: str
     task_type: TaskType
     usage: UsageStats = field(default_factory=UsageStats)
+    tool_calls: list[dict[str, Any]] | None = None

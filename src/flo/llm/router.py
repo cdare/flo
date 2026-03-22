@@ -35,6 +35,7 @@ class LLMRouter:
         messages: list[dict[str, str]],
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        tools: list[Any] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Send a chat completion request to the appropriate model.
@@ -59,6 +60,12 @@ class LLMRouter:
         if max_tokens is not None:
             params["max_tokens"] = max_tokens
 
+        if tools is not None:
+            from langchain_core.utils.function_calling import convert_to_openai_tool
+
+            params["tools"] = [convert_to_openai_tool(t) for t in tools]
+            params["tool_choice"] = "auto"
+
         log.debug(
             "llm.request", model=model, task_type=task_type, num_messages=len(messages)
         )
@@ -67,6 +74,21 @@ class LLMRouter:
 
         usage = self._extract_usage(response, model)
         content = response.choices[0].message.content or ""
+
+        raw_tool_calls = None
+        message = response.choices[0].message
+        if hasattr(message, "tool_calls") and message.tool_calls:
+            raw_tool_calls = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {
+                        "name": tc.function.name,
+                        "arguments": tc.function.arguments,
+                    },
+                }
+                for tc in message.tool_calls
+            ]
 
         log.info(
             "llm.response",
@@ -82,6 +104,7 @@ class LLMRouter:
             model=model,
             task_type=task_type,
             usage=usage,
+            tool_calls=raw_tool_calls,
         )
 
     async def complete_structured(
