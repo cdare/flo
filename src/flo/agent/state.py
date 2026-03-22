@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
 
+from langchain_core.messages import (
+    BaseMessage,  # noqa: TC002 - LangGraph needs this at runtime
+)
 from pydantic import BaseModel
 
 from flo.llm.models import TaskType  # noqa: TC001 - Pydantic needs this at runtime
@@ -11,7 +14,7 @@ from flo.llm.models import TaskType  # noqa: TC001 - Pydantic needs this at runt
 class AgentState(TypedDict):
     """State schema for the agent graph."""
 
-    messages: Annotated[list[dict[str, str]], operator.add]
+    messages: Annotated[list[BaseMessage | dict[str, str]], operator.add]
     task_type: TaskType | None
     is_correction: bool
     plan: str | None
@@ -19,6 +22,7 @@ class AgentState(TypedDict):
     conversation_id: str
     user_id: str
     user_preferences: list[dict[str, Any]]
+    active_skills: NotRequired[list[str]]
 
 
 class Classification(BaseModel):
@@ -26,6 +30,7 @@ class Classification(BaseModel):
 
     task_type: TaskType
     is_correction: bool
+    active_skills: list[str] = []
     reasoning: str
 
 

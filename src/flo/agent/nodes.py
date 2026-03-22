@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import structlog
+from langchain_core.messages import AIMessage
 
 from flo.agent.state import AgentState, Classification, ExtractedPreference
 from flo.llm.models import TaskType
@@ -81,10 +82,25 @@ def create_load_preferences_node() -> Any:
 
 def create_classify_node(router: LLMRouter, *, max_messages: int = 20) -> Any:
     """Create the classify node that determines task complexity."""
+    from flo.tools import get_skill_descriptions
+
+    skill_descriptions = get_skill_descriptions()
+    skill_list = "\n".join(
+        f"- {s['name']}: {s['description']}" for s in skill_descriptions
+    )
 
     async def classify(state: AgentState) -> dict[str, Any]:
         log.info("node.classify", conversation_id=state.get("conversation_id"))
         system_parts = [CLASSIFY_SYSTEM_PROMPT]
+
+        if skill_list:
+            system_parts.append(
+                f"\nAvailable skills (select 0 or more by name):\n{skill_list}\n"
+                "If the task requires tools, include the relevant skill names "
+                "in active_skills. "
+                "If no tools are needed, return an empty list."
+            )
+
         prefs = state.get("user_preferences", [])
         if prefs:
             pref_lines = [p.get("preference", "") for p in prefs if p.get("preference")]
@@ -108,9 +124,14 @@ def create_classify_node(router: LLMRouter, *, max_messages: int = 20) -> Any:
             "node.classify.result",
             task_type=result.task_type,
             is_correction=result.is_correction,
+            active_skills=result.active_skills,
             reasoning=result.reasoning,
         )
-        return {"task_type": result.task_type, "is_correction": result.is_correction}
+        return {
+            "task_type": result.task_type,
+            "is_correction": result.is_correction,
+            "active_skills": result.active_skills,
+        }
 
     return classify
 
@@ -135,11 +156,32 @@ def create_plan_node(router: LLMRouter, *, max_messages: int = 20) -> Any:
 
 
 def create_execute_node(router: LLMRouter, *, max_messages: int = 20) -> Any:
-    """Create the execute node that carries out the task."""
+    """Create the execute node that carries out the task.
+
+    Loads tools from active_skills via SkillRegistry. If the LLM returns
+    tool_calls, they are stored in messages for routing to ToolNode.
+    """
 
     async def execute(state: AgentState) -> dict[str, Any]:
         log.info("node.execute", conversation_id=state.get("conversation_id"))
+
         system_parts = [EXECUTE_SYSTEM_PROMPT]
+
+        from flo.tools import get_skill
+
+        active_skill_names = state.get("active_skills", [])
+        tools: list[Any] = []
+        task_type = state.get("task_type") or TaskType.EXECUTION
+
+        for skill_name in active_skill_names:
+            skill = get_skill(skill_name)
+            if skill is None:
+                continue
+            tools.extend(skill.tools)
+            system_parts.append(f"\n{skill.system_prompt}")
+            if skill.task_type_override is not None:
+                task_type = skill.task_type_override
+
         prefs = state.get("user_preferences", [])
         if prefs:
             pref_lines = [p.get("preference", "") for p in prefs if p.get("preference")]
@@ -154,11 +196,32 @@ def create_execute_node(router: LLMRouter, *, max_messages: int = 20) -> Any:
             {"role": "system", "content": "\n".join(system_parts)},
             *state["messages"][-max_messages:],
         ]
-        result = await router.complete(
-            task_type=TaskType.EXECUTION,
-            messages=messages,
-        )
-        log.info("node.execute.complete")
+
+        if tools:
+            result = await router.complete(
+                task_type=task_type,
+                messages=messages,
+                tools=tools,
+            )
+        else:
+            result = await router.complete(
+                task_type=task_type,
+                messages=messages,
+            )
+
+        log.info("node.execute.complete", active_skills=active_skill_names)
+
+        if result.tool_calls:
+            return {
+                "messages": [
+                    AIMessage(
+                        content=result.content or "",
+                        tool_calls=result.tool_calls,
+                    )
+                ],
+                "response": "",
+            }
+
         return {"response": result.content}
 
     return execute
@@ -218,3 +281,13 @@ def create_respond_node() -> Any:
         }
 
     return respond
+
+
+def route_after_execute(state: AgentState) -> str:
+    """Route to tool_node if tool_calls present, else to respond."""
+    messages = state.get("messages", [])
+    if messages:
+        last = messages[-1]
+        if isinstance(last, AIMessage) and last.tool_calls:
+            return "tool_node"
+    return "respond"

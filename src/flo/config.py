@@ -24,6 +24,14 @@ class Settings(BaseSettings):
     # Memory
     max_messages: int = 20
 
+    # Google APIs
+    google_credentials_path: str = "credentials.json"
+    google_token_path: str = "token.json"
+
+    # Search
+    search_provider: str = "tavily"
+    search_api_key: str = ""
+
     @property
     def is_production(self) -> bool:
         return self.env == "production"
