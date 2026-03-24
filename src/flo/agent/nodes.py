@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -16,6 +17,36 @@ if TYPE_CHECKING:
     from flo.llm.router import LLMRouter
 
 log = structlog.get_logger(__name__)
+
+
+def _convert_tool_calls_to_langchain(
+    tool_calls: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Convert OpenAI tool_calls format to LangChain format.
+
+    OpenAI format: {"id": "...", "type": "function", "function": {"name": "...", "arguments": "..."}}
+    LangChain format: {"id": "...", "name": "...", "args": {...}, "type": "tool_call"}
+    """
+    result = []
+    for tc in tool_calls:
+        # Handle OpenAI format
+        if "function" in tc:
+            args_str = tc["function"].get("arguments", "{}")
+            try:
+                args = json.loads(args_str) if isinstance(args_str, str) else args_str
+            except json.JSONDecodeError:
+                args = {}
+            result.append({
+                "id": tc.get("id", ""),
+                "name": tc["function"]["name"],
+                "args": args,
+                "type": "tool_call",
+            })
+        # Already in LangChain format
+        elif "name" in tc and "args" in tc:
+            result.append(tc)
+    return result
+
 
 CLASSIFY_SYSTEM_PROMPT = (
     "You are a task classifier. Analyze the user's message and determine:\n"
@@ -216,7 +247,7 @@ def create_execute_node(router: LLMRouter, *, max_messages: int = 20) -> Any:
                 "messages": [
                     AIMessage(
                         content=result.content or "",
-                        tool_calls=result.tool_calls,
+                        tool_calls=_convert_tool_calls_to_langchain(result.tool_calls),
                     )
                 ],
                 "response": "",
