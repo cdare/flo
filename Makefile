@@ -103,18 +103,17 @@ run:
 	@echo "✅ Server started (PID: $$(cat .pids/server.pid))"
 
 stop:
-	@if [ -f .pids/server.pid ]; then \
-		PID=$$(cat .pids/server.pid); \
-		if ps -p $$PID > /dev/null 2>&1; then \
-			echo "🛑 Stopping server (PID: $$PID)..."; \
-			kill -TERM -- -$$PID 2>/dev/null || kill $$PID; \
-			rm .pids/server.pid; \
-			echo "✅ Server stopped"; \
-		else \
-			echo "⚠️  Server process not found, cleaning up PID file"; \
-			rm .pids/server.pid; \
-		fi \
+	@echo "🛑 Stopping server..."
+	@if lsof -ti:$(SERVER_PORT) > /dev/null 2>&1; then \
+		lsof -ti:$(SERVER_PORT) | xargs kill -TERM 2>/dev/null || true; \
+		sleep 1; \
+		if lsof -ti:$(SERVER_PORT) > /dev/null 2>&1; then \
+			lsof -ti:$(SERVER_PORT) | xargs kill -9 2>/dev/null || true; \
+		fi; \
+		rm -f .pids/server.pid; \
+		echo "✅ Server stopped"; \
 	else \
+		rm -f .pids/server.pid; \
 		echo "ℹ️  Server not running"; \
 	fi
 
@@ -123,13 +122,9 @@ restart: stop run
 status:
 	@echo "📊 Service Status:"
 	@echo ""
-	@if [ -f .pids/server.pid ]; then \
-		PID=$$(cat .pids/server.pid); \
-		if ps -p $$PID > /dev/null 2>&1; then \
-			echo "  ✅ server: running (PID: $$PID)"; \
-		else \
-			echo "  ❌ server: stopped (stale PID file)"; \
-		fi \
+	@if lsof -ti:$(SERVER_PORT) > /dev/null 2>&1; then \
+		PIDS=$$(lsof -ti:$(SERVER_PORT) | tr '\n' ' '); \
+		echo "  ✅ server: running on port $(SERVER_PORT) (PIDs: $$PIDS)"; \
 	else \
 		echo "  ⚪ server: not running"; \
 	fi
