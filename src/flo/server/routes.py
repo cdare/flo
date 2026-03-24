@@ -35,6 +35,7 @@ async def chat(req: ChatRequest, request: Request) -> ChatResponse:
         "conversation_id": req.conversation_id,
         "user_id": req.user_id,
         "user_preferences": [],
+        "model_preference": req.model_preference,
     }
 
     config = {"configurable": {"thread_id": req.conversation_id}}

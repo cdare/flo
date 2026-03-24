@@ -43,6 +43,13 @@ help:
 	@echo ""
 	@echo "  Utility:"
 	@echo "    make clean            Remove build artifacts"
+	@echo ""
+	@echo "  Database:"
+	@echo "    make db-tables        Show database tables"
+	@echo "    make db-checkpoints   Show conversation checkpoints"
+	@echo "    make db-writes        Show recent writes"
+	@echo "    make db-schema        Show full schema"
+	@echo "    make db-shell         Open interactive SQLite shell"
 
 # =============================================================================
 # Setup
@@ -147,5 +154,28 @@ clean:
 	@rm -rf dist/ build/ *.egg-info src/*.egg-info .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage
 	@find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	@echo "✅ Clean"
+
+db-tables:
+	@echo "📊 Database tables:"
+	@sqlite3 flo.db ".tables" 2>/dev/null || echo "Database not found (run server first)"
+
+db-checkpoints:
+	@echo "📊 Conversation checkpoints:"
+	@sqlite3 flo.db "SELECT thread_id, checkpoint_ns, COUNT(*) as steps FROM checkpoints GROUP BY thread_id, checkpoint_ns ORDER BY thread_id;" 2>/dev/null || echo "No checkpoints found"
+
+db-writes:
+	@echo "📊 Recent writes (last 20):"
+	@sqlite3 flo.db -header -column "SELECT thread_id, checkpoint_ns, channel, type FROM writes ORDER BY rowid DESC LIMIT 20;" 2>/dev/null || echo "No writes found"
+
+db-schema:
+	@echo "📊 Database schema:"
+	@sqlite3 flo.db ".schema" 2>/dev/null || echo "Database not found"
+
+db-dump:
+	@echo "📊 Full database dump:"
+	@sqlite3 flo.db ".dump" 2>/dev/null | head -200 || echo "Database not found"
+
+db-shell:
+	@sqlite3 flo.db 2>/dev/null || echo "Database not found (run server first)"
 
 .PHONY: help install install-dev lint format typecheck validate test test-cov run stop restart status logs logs-follow clean

@@ -48,6 +48,94 @@ def _convert_tool_calls_to_langchain(
     return result
 
 
+def _convert_tool_calls_to_openai(
+    tool_calls: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Convert LangChain tool_calls format to OpenAI format.
+
+    LangChain format: {"id": "...", "name": "...", "args": {...}, "type": "tool_call"}
+    OpenAI format: {"id": "...", "type": "function", "function": {"name": "...", "arguments": "..."}}
+    """
+    result = []
+    for tc in tool_calls:
+        # Handle LangChain format
+        if "name" in tc and "args" in tc:
+            args = tc.get("args", {})
+            args_str = json.dumps(args) if isinstance(args, dict) else str(args)
+            result.append({
+                "id": tc.get("id", ""),
+                "type": "function",
+                "function": {
+                    "name": tc["name"],
+                    "arguments": args_str,
+                },
+            })
+        # Already in OpenAI format
+        elif "function" in tc:
+            result.append(tc)
+    return result
+
+
+def _sanitize_message_window(messages: list[Any]) -> list[Any]:
+    """Drop leading tool messages that have no paired tool-call AIMessage in the window.
+
+    When the message window is sliced, a ToolMessage can end up at the front
+    without its paired AIMessage(tool_calls=[...]). Gemini (and some other
+    providers) reject this. Drop those orphaned messages from the front.
+    """
+    result = list(messages)
+    while result:
+        msg = result[0]
+        is_tool = False
+        if isinstance(msg, dict):
+            is_tool = msg.get("role") == "tool"
+        elif hasattr(msg, "type"):
+            is_tool = msg.type == "tool"
+        if not is_tool:
+            break
+        result.pop(0)
+    return result
+
+
+def _convert_messages_to_openai(messages: list[Any]) -> list[dict[str, Any]]:
+    """Convert LangChain messages to OpenAI message format."""
+    result = []
+    for msg in messages:
+        # Already a dict - pass through but check tool_calls
+        if isinstance(msg, dict):
+            if "tool_calls" in msg and msg["tool_calls"]:
+                msg = dict(msg)
+                msg["tool_calls"] = _convert_tool_calls_to_openai(msg["tool_calls"])
+            result.append(msg)
+            continue
+
+        # Convert LangChain message types
+        if hasattr(msg, "type"):
+            msg_type = msg.type
+            if msg_type == "human":
+                result.append({"role": "user", "content": msg.content})
+            elif msg_type == "ai":
+                entry: dict[str, Any] = {"role": "assistant", "content": msg.content}
+                if hasattr(msg, "tool_calls") and msg.tool_calls:
+                    entry["tool_calls"] = _convert_tool_calls_to_openai(msg.tool_calls)
+                result.append(entry)
+            elif msg_type == "tool":
+                result.append({
+                    "role": "tool",
+                    "tool_call_id": getattr(msg, "tool_call_id", ""),
+                    "content": msg.content,
+                })
+            elif msg_type == "system":
+                result.append({"role": "system", "content": msg.content})
+            else:
+                # Fallback
+                result.append({"role": "user", "content": str(msg.content)})
+        else:
+            # Unknown format - try to extract content
+            result.append({"role": "user", "content": str(msg)})
+    return result
+
+
 CLASSIFY_SYSTEM_PROMPT = (
     "You are a task classifier. Analyze the user's message and determine:\n"
     "1. If it requires complex multi-step planning (PLANNING) or a simple "
@@ -141,9 +229,12 @@ def create_classify_node(router: LLMRouter, *, max_messages: int = 20) -> Any:
                     + "\n".join(f"- {p}" for p in pref_lines)
                 )
 
+        # Convert LangChain messages to OpenAI format for litellm
+        window = _sanitize_message_window(state["messages"][-max_messages:])
+        converted_messages = _convert_messages_to_openai(window)
         messages = [
             {"role": "system", "content": "\n".join(system_parts)},
-            *state["messages"][-max_messages:],
+            *converted_messages,
         ]
         result, _ = await router.complete_structured(
             task_type=TaskType.EXECUTION,
@@ -172,9 +263,12 @@ def create_plan_node(router: LLMRouter, *, max_messages: int = 20) -> Any:
 
     async def plan(state: AgentState) -> dict[str, Any]:
         log.info("node.plan", conversation_id=state.get("conversation_id"))
+        # Convert LangChain messages to OpenAI format for litellm
+        window = _sanitize_message_window(state["messages"][-max_messages:])
+        converted_messages = _convert_messages_to_openai(window)
         messages = [
             {"role": "system", "content": PLAN_SYSTEM_PROMPT},
-            *state["messages"][-max_messages:],
+            *converted_messages,
         ]
         result = await router.complete(
             task_type=TaskType.PLANNING,
@@ -204,6 +298,13 @@ def create_execute_node(router: LLMRouter, *, max_messages: int = 20) -> Any:
         tools: list[Any] = []
         task_type = state.get("task_type") or TaskType.EXECUTION
 
+        # Honor explicit model preference from the request
+        model_pref = state.get("model_preference")
+        if model_pref == "premium":
+            task_type = TaskType.PLANNING
+        elif model_pref == "fast":
+            task_type = TaskType.EXECUTION
+
         for skill_name in active_skill_names:
             skill = get_skill(skill_name)
             if skill is None:
@@ -223,9 +324,12 @@ def create_execute_node(router: LLMRouter, *, max_messages: int = 20) -> Any:
         if state.get("plan"):
             system_parts.append(f"\nFollow this plan:\n{state['plan']}")
 
+        # Convert LangChain messages to OpenAI format for litellm
+        window = _sanitize_message_window(state["messages"][-max_messages:])
+        converted_messages = _convert_messages_to_openai(window)
         messages = [
             {"role": "system", "content": "\n".join(system_parts)},
-            *state["messages"][-max_messages:],
+            *converted_messages,
         ]
 
         if tools:
@@ -269,9 +373,12 @@ def create_store_correction_node(router: LLMRouter, *, max_messages: int = 20) -
             user_id=state.get("user_id"),
             conversation_id=state.get("conversation_id"),
         )
+        # Convert LangChain messages to OpenAI format for litellm
+        window = _sanitize_message_window(state["messages"][-max_messages:])
+        converted_messages = _convert_messages_to_openai(window)
         messages = [
             {"role": "system", "content": EXTRACT_PREFERENCE_PROMPT},
-            *state["messages"][-max_messages:],
+            *converted_messages,
         ]
         result, _ = await router.complete_structured(
             task_type=TaskType.EXECUTION,
