@@ -87,6 +87,40 @@ WHATSAPP_API_TOKEN=...
 | `FLO_SEARCH_PROVIDER` | `tavily` | Search provider (`tavily` or `serpapi`) |
 | `FLO_SEARCH_API_KEY` | — | Search provider API key |
 
+### LLM Provider Options
+
+Flo uses [litellm](https://docs.litellm.ai/) for LLM abstraction, supporting 100+ models. Switch providers by changing `FLO_CHEAP_MODEL` and `FLO_PREMIUM_MODEL`:
+
+| Provider | Model String | Example |
+|----------|-------------|--------|
+| OpenAI | `gpt-4o`, `gpt-4o-mini`, `o3-mini` | `FLO_PREMIUM_MODEL=gpt-4o` |
+| Anthropic | `anthropic/claude-3-5-sonnet-20241022`, `anthropic/claude-3-5-haiku-20241022` | `FLO_PREMIUM_MODEL=anthropic/claude-3-5-sonnet-20241022` |
+| Google | `gemini/gemini-2.0-flash`, `gemini/gemini-2.0-pro` | `FLO_CHEAP_MODEL=gemini/gemini-2.0-flash` |
+| Groq | `groq/llama-3.3-70b-versatile` | `FLO_CHEAP_MODEL=groq/llama-3.3-70b-versatile` |
+| Mistral | `mistral/mistral-large-latest` | `FLO_PREMIUM_MODEL=mistral/mistral-large-latest` |
+| Ollama (local) | `ollama/llama3.1:8b`, `ollama/llama3.2:3b` | `FLO_CHEAP_MODEL=ollama/llama3.2:3b` |
+
+#### Recommended Configurations
+
+**Cost-optimized** (cheapest viable):
+```bash
+FLO_CHEAP_MODEL=gemini/gemini-2.0-flash
+FLO_PREMIUM_MODEL=gpt-4o-mini
+```
+
+**Quality-optimized** (best results):
+```bash
+FLO_CHEAP_MODEL=gpt-4o
+FLO_PREMIUM_MODEL=anthropic/claude-3-5-sonnet-20241022
+```
+
+**Privacy-first** (local only, requires [Ollama](https://ollama.ai/)):
+```bash
+FLO_CHEAP_MODEL=ollama/llama3.2:3b
+FLO_PREMIUM_MODEL=ollama/llama3.1:8b
+# Start Ollama first: ollama serve
+```
+
 ## Usage
 
 ### Start the Server
