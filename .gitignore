@@ -27,6 +27,11 @@ build/
 .DS_Store
 Thumbs.db
 
+# Database
+*.db
+*.db-shm
+*.db-wal
+
 # Testing
 .coverage
 htmlcov/
