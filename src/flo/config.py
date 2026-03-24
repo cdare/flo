@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     google_credentials_path: str = "credentials.json"
     google_token_path: str = "token.json"
 
+    # LLM call timeout
+    llm_timeout: int = 30  # seconds
+
     # Search
     search_provider: str = "tavily"
     search_api_key: str = ""

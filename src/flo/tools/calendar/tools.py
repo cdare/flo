@@ -36,6 +36,15 @@ def create_calendar_tools(service: Any) -> list[BaseTool]:
         """
         if time_min is None:
             time_min = datetime.now(UTC).isoformat()
+        else:
+            # Ensure timezone info is present — Google Calendar requires RFC 3339
+            try:
+                dt = datetime.fromisoformat(time_min)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=UTC)
+                time_min = dt.isoformat()
+            except ValueError:
+                time_min = datetime.now(UTC).isoformat()
         result = (
             service.events()
             .list(

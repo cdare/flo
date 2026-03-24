@@ -77,13 +77,19 @@ def _convert_tool_calls_to_openai(
 
 
 def _sanitize_message_window(messages: list[Any]) -> list[Any]:
-    """Drop leading tool messages that have no paired tool-call AIMessage in the window.
+    """Remove ToolMessages that have no paired tool-call AIMessage in the window.
 
-    When the message window is sliced, a ToolMessage can end up at the front
-    without its paired AIMessage(tool_calls=[...]). Gemini (and some other
-    providers) reject this. Drop those orphaned messages from the front.
+    Handles two cases:
+    1. Leading ToolMessages — slicing cut the AIMessage off the front.
+    2. Mid-window orphans — AIMessage present but tool_call_id doesn't match
+       any tool_calls entry (e.g. from a different, earlier turn).
+
+    Gemini and some other providers reject messages with unmatched tool
+    call/response pairs.
     """
     result = list(messages)
+
+    # Pass 1: drop leading ToolMessages (no AIMessage before them)
     while result:
         msg = result[0]
         is_tool = False
@@ -94,7 +100,33 @@ def _sanitize_message_window(messages: list[Any]) -> list[Any]:
         if not is_tool:
             break
         result.pop(0)
-    return result
+
+    # Pass 2: collect all tool_call_ids referenced by AIMessages in window
+    known_call_ids: set[str] = set()
+    for msg in result:
+        if isinstance(msg, dict):
+            for tc in msg.get("tool_calls", []) or []:
+                if tc_id := tc.get("id"):
+                    known_call_ids.add(tc_id)
+        elif hasattr(msg, "type") and msg.type == "ai":
+            for tc in getattr(msg, "tool_calls", []) or []:
+                tc_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                if tc_id:
+                    known_call_ids.add(tc_id)
+
+    # Pass 3: drop ToolMessages whose tool_call_id is not in known_call_ids
+    cleaned = []
+    for msg in result:
+        if isinstance(msg, dict) and msg.get("role") == "tool":
+            tc_id = msg.get("tool_call_id", "")
+            if tc_id and tc_id not in known_call_ids:
+                continue
+        elif hasattr(msg, "type") and msg.type == "tool":
+            tc_id = getattr(msg, "tool_call_id", "")
+            if tc_id and tc_id not in known_call_ids:
+                continue
+        cleaned.append(msg)
+    return cleaned
 
 
 def _convert_messages_to_openai(messages: list[Any]) -> list[dict[str, Any]]:
@@ -156,9 +188,13 @@ PLAN_SYSTEM_PROMPT = (
     "a clear, step-by-step plan. Be specific and actionable."
 )
 
-EXECUTE_SYSTEM_PROMPT = (
-    "You are a helpful personal assistant. Respond clearly and concisely."
-)
+def _execute_system_prompt() -> str:
+    """Build execute system prompt including current UTC date/time."""
+    now = datetime.now(UTC)
+    return (
+        "You are a helpful personal assistant. Respond clearly and concisely.\n"
+        f"Current date and time: {now.strftime('%A, %d %B %Y, %H:%M UTC')}"
+    )
 
 EXTRACT_PREFERENCE_PROMPT = (
     "Extract the user's preference or correction from the conversation. "
@@ -290,7 +326,7 @@ def create_execute_node(router: LLMRouter, *, max_messages: int = 20) -> Any:
     async def execute(state: AgentState) -> dict[str, Any]:
         log.info("node.execute", conversation_id=state.get("conversation_id"))
 
-        system_parts = [EXECUTE_SYSTEM_PROMPT]
+        system_parts = [_execute_system_prompt()]
 
         from flo.tools import get_skill
 

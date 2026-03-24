@@ -50,6 +50,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         settings,
         checkpointer=checkpointer,
     )
+    app.state.settings = settings
 
     log.info("startup.complete")
     yield

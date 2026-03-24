@@ -42,9 +42,12 @@ async def chat(req: ChatRequest, request: Request) -> ChatResponse:
 
     try:
         result = await graph.ainvoke(state, config=config)
-    except Exception:
+    except Exception as exc:
         log.exception("agent.invoke_failed", conversation_id=req.conversation_id)
-        raise HTTPException(status_code=502, detail="Agent processing failed") from None
+        settings = getattr(request.app.state, "settings", None)
+        is_dev = settings is not None and not settings.is_production
+        detail = f"{type(exc).__name__}: {exc}" if is_dev else "Agent processing failed"
+        raise HTTPException(status_code=502, detail=detail) from None
 
     return ChatResponse(
         response=result["response"],

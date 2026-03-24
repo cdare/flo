@@ -23,6 +23,7 @@ class LLMRouter:
             TaskType.EXECUTION: settings.cheap_model,
             TaskType.PLANNING: settings.premium_model,
         }
+        self._timeout: int = settings.llm_timeout
 
     def model_for(self, task_type: TaskType) -> str:
         """Return the model name for a given task type."""
@@ -55,6 +56,7 @@ class LLMRouter:
             "model": model,
             "messages": messages,
             "temperature": temperature,
+            "timeout": self._timeout,
             **kwargs,
         }
         if max_tokens is not None:
@@ -140,6 +142,7 @@ class LLMRouter:
             "messages": messages,
             "temperature": temperature,
             "response_format": response_model,
+            "timeout": self._timeout,
             **kwargs,
         }
         if max_tokens is not None:

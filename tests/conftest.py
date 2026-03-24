@@ -15,8 +15,11 @@ def settings(tmp_path) -> Settings:
     """Test settings with safe defaults."""
     return Settings(
         env="testing",
+        host="0.0.0.0",
+        port=8000,
         log_level="debug",
         cheap_model="test-cheap-model",
         premium_model="test-premium-model",
         db_path=str(tmp_path / "test.db"),
+        llm_timeout=30,
     )

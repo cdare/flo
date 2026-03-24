@@ -29,10 +29,18 @@ if TYPE_CHECKING:
 
 
 def _route_after_classify(state: AgentState) -> str:
-    """Route to plan, execute, or store_correction based on classification."""
+    """Route to plan, execute, or store_correction based on classification.
+
+    model_preference overrides the classifier's task_type decision:
+    - 'fast'    → always skip planning, go direct to execute
+    - 'premium' → always run plan node regardless of classifier
+    """
     if state.get("is_correction"):
         return "store_correction"
-    if state.get("task_type") == TaskType.PLANNING:
+    model_pref = state.get("model_preference")
+    if model_pref == "fast":
+        return "execute"
+    if model_pref == "premium" or state.get("task_type") == TaskType.PLANNING:
         return "plan"
     return "execute"
 
