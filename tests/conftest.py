@@ -11,11 +11,12 @@ from flo.config import Settings
 
 
 @pytest.fixture
-def settings() -> Settings:
+def settings(tmp_path) -> Settings:
     """Test settings with safe defaults."""
     return Settings(
         env="testing",
         log_level="debug",
         cheap_model="test-cheap-model",
         premium_model="test-premium-model",
+        db_path=str(tmp_path / "test.db"),
     )

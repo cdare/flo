@@ -21,6 +21,7 @@ from flo.llm.models import TaskType
 from flo.llm.router import LLMRouter
 
 if TYPE_CHECKING:
+    from langgraph.checkpoint.base import BaseCheckpointSaver
     from langgraph.graph.state import CompiledStateGraph
     from langgraph.store.base import BaseStore
 
@@ -41,6 +42,7 @@ def build_graph(
     *,
     router: LLMRouter | None = None,
     store: BaseStore | None = None,
+    checkpointer: BaseCheckpointSaver | None = None,
 ) -> CompiledStateGraph:
     """Build and compile the agent graph.
 
@@ -113,4 +115,6 @@ def build_graph(
 
     graph.add_edge("respond", END)
 
-    return graph.compile(checkpointer=MemorySaver(), store=store)
+    if checkpointer is None:
+        checkpointer = MemorySaver()
+    return graph.compile(checkpointer=checkpointer, store=store)

@@ -28,11 +28,21 @@
 
 ## Key Files
 
-- `src/flo/config.py` — Settings (host, port, env, models, google creds, search config)
-- `src/flo/agent/graph.py` — build_graph(settings, *, router=None, store=None)
+- `src/flo/config.py` — Settings (host, port, env, models, google creds, search config, db_path)
+- `src/flo/agent/graph.py` — build_graph(settings, *, router=None, store=None, checkpointer=None)
 - `src/flo/log.py` — configure_logging()
 - `Makefile` — install, test, run/stop/restart targets
+- `src/flo/server/app.py` — create_app() factory, lifespan (skills→DB→graph), module-level `app` for uvicorn
+- `src/flo/server/routes.py` — /chat (POST) and /health (GET) endpoints
+- `src/flo/server/models.py` — ChatRequest/ChatResponse pydantic models
+- `src/flo/server/persistence.py` — init_checkpointer() returns (saver, conn) tuple
 
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
+- Phase 6: `init_checkpointer` returns `(saver, conn)` tuple per Ripley's review — lifespan closes `conn` directly instead of reaching into saver internals.
+- Phase 6: Lifespan startup order matters: register_skills() → init_checkpointer() → build_graph(). Skills must be registered before graph compilation because build_graph calls get_all_skills() internally.
+- Phase 6: ruff enforces TC003 — stdlib imports used only for type hints must go in `TYPE_CHECKING` block (e.g., `AsyncIterator`).
+- Phase 6: ruff enforces B904 — exceptions raised inside `except` blocks need `from err` or `from None` to chain properly.
+- Phase 6: `conftest.py` settings fixture uses `tmp_path` for `db_path` to avoid touching real databases during tests.
+- Phase 6: The `langgraph-checkpoint-sqlite` package uses `AsyncSqliteSaver` from `langgraph.checkpoint.sqlite.aio`, not from a top-level import.

@@ -41,3 +41,22 @@
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
+
+### 2026-03-22 — Architecture Review (Phases 1-5 complete)
+
+- **Checkpointer injection gap:** `build_graph()` hardcodes `MemorySaver()` at compile time (line 103 of graph.py). The `store` parameter is injectable but `checkpointer` is not. This MUST be fixed before Phase 6 SQLite migration.
+- **Skill registration ordering:** `build_graph()` calls `get_all_skills()` to populate ToolNode, so `register_skills()` must run before `build_graph()`. This ordering is currently implicit — Phase 6 lifespan must make it explicit.
+- **Execute node registry coupling:** `create_execute_node` imports `get_skill` from the module-level singleton registry inside the async callable. Acceptable for single-agent, but breaks isolation for multi-agent scenarios.
+- **Settings gap:** `db_path` field is not yet in `config.py` — task.md specifies `FLO_DB_PATH` defaulting to `"flo.db"`.
+- **Pattern verdict:** Closure-based DI for nodes, Skill registry, ToolNode loop, and LLMRouter strategy pattern are all appropriate for the current scale. No pattern changes needed for Phases 6-8.
+- **Phase 6 contract:** Server routes must extract `user_id` + `conversation_id`, construct state, call `graph.ainvoke()`. Agent layer must never know about HTTP.
+- **Discord requires bot mode** (persistent WebSocket), not webhook-only. WhatsApp v1 should be text-only.
+- **SQLite WAL mode** should be enabled on connection for concurrent safety.
+
+### 2026-03-23 — Phase 6 Plan: FastAPI Server + SQLite Persistence
+
+- **Store gap:** `langgraph-checkpoint-sqlite` provides `AsyncSqliteSaver` (checkpointer) but no `AsyncSqliteStore` equivalent. Phase 6 keeps `InMemoryStore` for cross-conversation preferences; SQLite store migration deferred until LangGraph ships one or we build a custom adapter.
+- **Lifespan ordering is critical:** `register_skills()` → `init_checkpointer()` → `build_graph()`. Skills must register before graph compilation because `build_graph()` calls `get_all_skills()` to populate `ToolNode`. This is now explicit in the lifespan function.
+- **Test seam is the graph:** Server tests mock `graph.ainvoke()`, not the LLM or individual nodes. This keeps HTTP boundary tests fast and decoupled from agent internals.
+- **`busy_timeout` pragma:** Added `PRAGMA busy_timeout=5000` alongside WAL mode — prevents immediate `SQLITE_BUSY` errors under concurrent async access.
+- **Makefile already correct:** `SERVER_CMD` already targets `flo.server.app:app` — no changes needed to the Makefile for Phase 6.

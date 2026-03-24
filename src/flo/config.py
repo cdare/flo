@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # Memory
     max_messages: int = 20
 
+    # Database
+    db_path: str = "flo.db"
+
     # Google APIs
     google_credentials_path: str = "credentials.json"
     google_token_path: str = "token.json"
