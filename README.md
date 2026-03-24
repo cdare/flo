@@ -162,7 +162,9 @@ curl http://localhost:8000/health
 
 ## Google APIs Setup
 
-To enable Calendar and Gmail skills:
+To enable Calendar and Gmail skills, you need Google OAuth credentials. See [docs/tools.md](docs/tools.md) for detailed step-by-step instructions.
+
+Quick summary:
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a project and enable Calendar API + Gmail API

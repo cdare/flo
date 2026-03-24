@@ -19,6 +19,10 @@ build/
 # Environment
 .env
 
+# Google OAuth credentials (sensitive)
+credentials.json
+token.json
+
 # Logs and PIDs
 .logs/
 .pids/
