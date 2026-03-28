@@ -15,11 +15,17 @@ GMAIL_SYSTEM_PROMPT = (
 )
 
 
-def create_gmail_skill(service: Any) -> Skill:
-    """Create a Gmail skill with injected Google service."""
+def create_gmail_skill(service: Any, allowed_domains: list[str] | None = None) -> Skill:
+    """Create a Gmail skill with injected Google service.
+
+    Args:
+        service: Gmail API service resource.
+        allowed_domains: Optional allowlist of permitted recipient domains for
+            send_email (issue #5). Empty/None means all domains are permitted.
+    """
     return Skill(
         name="gmail",
         description="Read, search, and send emails via Gmail.",
-        tools=create_gmail_tools(service),
+        tools=create_gmail_tools(service, allowed_domains),
         system_prompt=GMAIL_SYSTEM_PROMPT,
     )

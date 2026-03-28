@@ -312,7 +312,7 @@ class TestLLMResponseToolCalls:
         from flo.llm.router import LLMRouter
 
         settings = Settings(
-            env="testing",
+            env="test",
             cheap_model="test-cheap-model",
             premium_model="test-premium-model",
         )

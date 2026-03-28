@@ -23,7 +23,6 @@ class AgentState(TypedDict):
     user_id: str
     user_preferences: list[dict[str, Any]]
     active_skills: NotRequired[list[str]]
-    model_preference: NotRequired[str | None]  # "fast" or "premium"
 
 
 class Classification(BaseModel):

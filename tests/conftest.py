@@ -14,8 +14,7 @@ from flo.config import Settings
 def settings(tmp_path) -> Settings:
     """Test settings with safe defaults."""
     return Settings(
-        env="testing",
-        host="0.0.0.0",
+        env="test",
         port=8000,
         log_level="debug",
         cheap_model="test-cheap-model",

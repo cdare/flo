@@ -65,6 +65,12 @@ class SerpAPIProvider:
         self._api_key = api_key
 
     async def search(self, query: str, max_results: int = 5) -> list[dict[str, str]]:
+        # SerpAPI requires the key as a query parameter and does not support
+        # header-based authentication.  The key is intentionally excluded from
+        # the params dict passed to structlog so it does not appear in
+        # application logs.  Be aware that the key may still appear in upstream
+        # proxy/web-server access logs; ensure those logs are appropriately
+        # restricted or redacted in production (issue #8).
         async with httpx.AsyncClient() as client:
             resp = await client.get(
                 self.BASE_URL,
