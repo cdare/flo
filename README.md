@@ -173,6 +173,168 @@ Quick summary:
 5. On first use, a browser window will open for authentication
 6. Token is saved to `token.json` for future use
 
+## Remote Server Deployment
+
+These instructions cover deploying Flo on a Ubuntu 20.04+ VPS or cloud instance.
+
+### Server Requirements
+
+- Ubuntu 20.04+ (or equivalent Linux distro)
+- Python 3.12+
+- git
+
+### Install
+
+```bash
+git clone https://github.com/cdare/flo.git
+cd flo
+make install-dev
+```
+
+### Configure
+
+```bash
+cp .env.example .env
+# Edit .env — set your API keys and:
+FLO_ENV=production
+# Optionally set an absolute DB path so data survives redeployments:
+FLO_DB_PATH=/var/lib/flo/flo.db
+```
+
+### Transfer Google Credentials
+
+If you use Calendar or Gmail, copy your credential files from your local machine:
+
+```bash
+scp credentials.json token.json user@your-server:/path/to/flo/
+```
+
+### Open Firewall Port
+
+```bash
+sudo ufw allow 8000
+sudo ufw reload
+```
+
+### Quick Start
+
+```bash
+make run      # Start server in background (PID-managed)
+make status   # Confirm it's running
+make logs     # Tail logs
+make stop     # Stop server
+```
+
+The server listens on `0.0.0.0:8000` by default.
+
+### Systemd Service (Recommended for Production)
+
+Create `/etc/systemd/system/flo.service`:
+
+```ini
+[Unit]
+Description=Flo Personal Assistant
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/path/to/flo
+EnvironmentFile=/path/to/flo/.env
+ExecStart=/path/to/flo/.venv/bin/uvicorn flo.server.app:app --host 0.0.0.0 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable flo
+sudo systemctl start flo
+sudo systemctl status flo
+```
+
+### Nginx Reverse Proxy (Optional)
+
+To serve Flo behind a domain name with SSL, add a site config in `/etc/nginx/sites-available/flo`:
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://localhost:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+```bash
+sudo ln -s /etc/nginx/sites-available/flo /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+Then use [Certbot](https://certbot.eff.org/) to add HTTPS.
+
+---
+
+## Discord Bot Setup
+
+### 1. Create a Discord Application
+
+1. Go to [https://discord.com/developers/applications](https://discord.com/developers/applications)
+2. Click **New Application**, give it a name (e.g. "Flo")
+3. Under the **Bot** tab, click **Add Bot**
+4. Copy the **Token** — you'll need this in a moment
+
+### 2. Enable Required Intents
+
+Still on the **Bot** tab, scroll to **Privileged Gateway Intents** and enable:
+
+- **Message Content Intent** ✓
+
+### 3. Invite the Bot to Your Server
+
+1. Go to **OAuth2 → URL Generator**
+2. Under **Scopes**, select `bot`
+3. Under **Bot Permissions**, select:
+   - `Send Messages`
+   - `Read Message History`
+   - `View Channels`
+4. Copy the generated URL, open it in a browser, and select your server
+
+### 4. Configure Flo
+
+Add the bot token to your `.env`:
+
+```bash
+FLO_DISCORD_TOKEN=your-bot-token-here
+```
+
+Optionally restrict the bot to a single channel. To get a channel ID, enable **Developer Mode** in Discord Settings → Advanced, then right-click any channel and choose **Copy ID**:
+
+```bash
+FLO_DISCORD_CHANNEL_ID=123456789012345678   # 0 = respond in all channels (default)
+```
+
+### 5. Start the Bot
+
+```bash
+python -m flo.integrations.discord
+```
+
+### 6. Test
+
+- **DM the bot** directly — it will respond to any message
+- **@mention the bot** in a server channel — it will respond to mentions
+
+---
+
 ## Development
 
 ```bash
