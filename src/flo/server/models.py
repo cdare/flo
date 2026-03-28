@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, Field
 
 
@@ -14,10 +12,11 @@ class ChatRequest(BaseModel):
     conversation_id: str = Field(
         min_length=1, description="Conversation thread identifier"
     )
-    message: str = Field(min_length=1, description="User message text")
-    model_preference: Literal["fast", "premium"] | None = Field(
-        default=None,
-        description="Force model tier: 'fast' (cheap model) or 'premium'. Omit for auto.",
+    # max_length guards against unbounded LLM token spend (issue #9).
+    # The hard cap here (32768) is a safety net; the operator-configurable
+    # FLO_MAX_MESSAGE_LENGTH (default 4096) is enforced in the route handler.
+    message: str = Field(
+        min_length=1, max_length=32768, description="User message text"
     )
 
 

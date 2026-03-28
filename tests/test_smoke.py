@@ -24,9 +24,9 @@ def test_import_subpackages() -> None:
 
 def test_config_defaults(settings) -> None:
     """Verify config loads with defaults."""
-    assert settings.env == "testing"
+    assert settings.env == "test"
     assert settings.port == 8000
-    assert settings.host == "0.0.0.0"
+    assert settings.host == "127.0.0.1"
     assert settings.cheap_model == "test-cheap-model"
 
 

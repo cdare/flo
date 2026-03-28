@@ -46,7 +46,9 @@ def register_skills(settings: Settings) -> None:
             gmail_service = build_google_service(creds, "gmail", "v1")
 
             _registry.register(create_calendar_skill(cal_service))
-            _registry.register(create_gmail_skill(gmail_service))
+            _registry.register(
+                create_gmail_skill(gmail_service, settings.allowed_email_domains)
+            )
             log.info("skills.google.registered", skills=["calendar", "gmail"])
         except Exception as e:
             log.warning(

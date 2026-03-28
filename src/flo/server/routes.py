@@ -25,6 +25,20 @@ async def chat(req: ChatRequest, request: Request) -> ChatResponse:
     The agent layer never knows about HTTP.
     """
     graph: CompiledStateGraph = request.app.state.graph
+    settings = getattr(request.app.state, "settings", None)
+
+    # Enforce configurable message length cap (issue #9)
+    max_len = getattr(settings, "max_message_length", 4096)
+    if len(req.message) > max_len:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Message exceeds maximum length of {max_len} characters",
+        )
+
+    # Prefix thread_id with user_id to prevent cross-user thread hijacking (issue #2).
+    # A caller who guesses another user's conversation_id cannot load that thread
+    # because the stored key incorporates the caller-supplied user_id.
+    thread_id = f"{req.user_id}:{req.conversation_id}"
 
     state = {
         "messages": [{"role": "user", "content": req.message}],
@@ -35,16 +49,14 @@ async def chat(req: ChatRequest, request: Request) -> ChatResponse:
         "conversation_id": req.conversation_id,
         "user_id": req.user_id,
         "user_preferences": [],
-        "model_preference": req.model_preference,
     }
 
-    config = {"configurable": {"thread_id": req.conversation_id}}
+    config = {"configurable": {"thread_id": thread_id}}
 
     try:
         result = await graph.ainvoke(state, config=config)
     except Exception as exc:
         log.exception("agent.invoke_failed", conversation_id=req.conversation_id)
-        settings = getattr(request.app.state, "settings", None)
         is_dev = settings is not None and not settings.is_production
         detail = f"{type(exc).__name__}: {exc}" if is_dev else "Agent processing failed"
         raise HTTPException(status_code=502, detail=detail) from None

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from email.headerregistry import Address
 from email.mime.text import MIMEText
 from typing import Any
 
@@ -11,15 +12,22 @@ from langchain_core.tools import BaseTool, tool
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 
 
-def create_gmail_tools(service: Any) -> list[BaseTool]:
+def create_gmail_tools(
+    service: Any, allowed_domains: list[str] | None = None
+) -> list[BaseTool]:
     """Create Gmail tool functions with injected service.
 
     Args:
         service: Gmail API service resource.
+        allowed_domains: Optional allowlist of permitted recipient domains for
+            send_email (e.g. ["example.com"]).  An empty list or None means
+            all recipients are permitted (insecure default — set
+            FLO_ALLOWED_EMAIL_DOMAINS in production) (issue #5).
 
     Returns:
         List of LangChain BaseTool instances.
     """
+    _allowed_domains: list[str] = [d.lower() for d in (allowed_domains or [])]
 
     def _list_emails(max_results: int = 10, query: str = "") -> list[dict[str, str]]:
         """Shared email listing logic (private, not a tool)."""
@@ -114,6 +122,19 @@ def create_gmail_tools(service: Any) -> list[BaseTool]:
             subject: Email subject line.
             body: Email body text (plain text).
         """
+        # Recipient domain allowlist check (issue #5).
+        # When _allowed_domains is non-empty, reject sends to any domain not
+        # on the list to prevent data exfiltration via prompt injection.
+        if _allowed_domains:
+            try:
+                recipient_domain = Address(addr_spec=to).domain.lower()
+            except Exception:
+                recipient_domain = ""
+            if not recipient_domain or recipient_domain not in _allowed_domains:
+                raise ValueError(
+                    f"Recipient domain '{recipient_domain}' is not in the allowed "
+                    f"list. Set FLO_ALLOWED_EMAIL_DOMAINS to permit this domain."
+                )
         message = MIMEText(body)
         message["to"] = to
         message["subject"] = subject
